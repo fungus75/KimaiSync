@@ -59,7 +59,7 @@ class KimaiAPI:
 
         return self.__get_from_server(query)
 
-    def get_timesheets(self, id=None, customer_id=None, project_id=None, order=None, direction=None):
+    def get_timesheets(self, id=None, customer_id=None, project_id=None, order=None, direction=None, begin = None):
         if not self.__logged_on:
             raise Exception("You have to logon first")
         query = "timesheets"
@@ -77,6 +77,14 @@ class KimaiAPI:
                 query += "?"
             query += "orderBy=" + order
 
+        if begin is not None:
+            if "?" in query:
+                query += "&"
+            else:
+                query += "?"
+            query += "begin=" + begin
+
+
         if direction is not None:
             if "?" in query:
                 query += "&"
@@ -85,6 +93,14 @@ class KimaiAPI:
             query += "order=" + direction
 
         return self.__get_from_server(query)
+
+    def save_timesheet(self, timesheet):
+        if "id" in timesheet:
+            endpoint = "timesheets/"+str(timesheet["id"])
+            timesheet.pop('id', None)
+            return self.__patch_to_server(endpoint, timesheet)
+
+        return self.__post_to_server("timesheets", timesheet)
 
     def __get_from_server(self, endpoint):
         return self.__apicall(endpoint)
@@ -120,6 +136,10 @@ class KimaiAPI:
 
     def __post_to_server(self, endpoint, data):
         return self.__apicall(endpoint, post=data)
+
+    def __patch_to_server(self, endpoint, data):
+        return self.__apicall(endpoint, patch=data)
+
 
     def __get_first_of_array(self, data):
         if data == None:

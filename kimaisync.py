@@ -165,7 +165,10 @@ if __name__ == "__main__":
                 #save_updated_config(config, args.config_file)
 
     # start syncing
-    timesheets = src_api.get_timesheets(customer_id=customer["id"], order="begin", direction="ASC")
+    begin = None
+    if "last_begin" in config:
+        begin = config["last_begin"]
+    timesheets = src_api.get_timesheets(customer_id=customer["id"], order="begin", direction="ASC", begin=begin)
     for timesheet in timesheets:
         # remove some unnecessary elements
         timesheet.pop('user', None)
@@ -175,5 +178,12 @@ if __name__ == "__main__":
         # translate mapping
         timesheet["activity"]=activity_mapping[str(timesheet["activity"])]
 
-        # TODO: Save Timesheet in Destination
+        # Save Timesheet in Destination
+        # TODO: dest_api.save_timesheet(timesheet)
         print(timesheet)
+
+        # Save Begin-Date in config in case of a crash/restart
+        config["last_begin"] = timesheet["begin"]
+        config["updated"] = True
+        # TODO: save_updated_config(config, args.config_file)
+
