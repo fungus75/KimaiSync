@@ -36,6 +36,54 @@ def is_empty(data):
 
     return False
 
+project_list = None
+activity_list = None
+
+def ask_project_mapping(project, api):
+    global project_list
+    print("Please provide Mapping for "+project["name"])
+    if project_list is None:
+        project_list = api.get_projects()
+
+    possible_ids=["-1"]
+
+    for p in project_list:
+        print(p["id"],p["name"])
+        possible_ids.append(str(p["id"]))
+
+    while True:
+        res = input("Mapping-ID for project "+project["name"]+" (-1 = Do not map): ")
+        if res in possible_ids:
+            return res
+
+
+
+
+def save_updated_config(config, file):
+    if "updated" in config:
+        config.pop('updated', None)
+        with open(file, 'w') as f:
+            json.dump(config, f)
+
+
+def ask_activity_mapping(activity, api):
+    global activity_list
+    print("Please provide Mapping for "+activity["name"])
+    if activity_list is None:
+        activity_list = api.get_activities(order="id")
+
+    possible_ids=[]
+
+    for p in activity_list:
+        print(p["id"],p["name"])
+        possible_ids.append(str(p["id"]))
+
+    while True:
+        res = input("Mapping-ID for activity "+activity["name"]+": ")
+        if res in possible_ids:
+            return res
+
+
 
 if __name__ == "__main__":
     script_full_path = os.path.abspath(getsourcefile(lambda: 0))
@@ -78,10 +126,7 @@ if __name__ == "__main__":
     get_config_value("destination_apikey", config, args)
 
     # save updated config
-    if "updated" in config:
-        config.pop('updated', None)
-        with open(args.config_file, 'w') as f:
-            json.dump(config, f)
+    save_updated_config(config,args.config_file)
 
     # logon to destination api
     dest_api = KimaiAPI(url=config["destination_url"], apikey=config["destination_apikey"])
@@ -99,19 +144,36 @@ if __name__ == "__main__":
     # validate projects and mapping
     projects = src_api.get_projects(customer_id=customer["id"])
     if not "project_mapping" in config:
-        config["project_mapping"] = []
+        config["project_mapping"] = {}
     if not "activity_mapping" in config:
-        config["activity_mapping"] = []
+        config["activity_mapping"] = {}
     project_mapping = config["project_mapping"]
     activity_mapping= config["activity_mapping"]
     for project in projects:
-        if project["id"] not in project_mapping:
+        if str(project["id"]) not in project_mapping:
             print("Mapping missing for project " + project["name"])
-            # TODO: Create Mapping
+            config["project_mapping"][str(project["id"])]=ask_project_mapping(project,dest_api)
+            config["updated"]=True
+            save_updated_config(config, args.config_file)
 
         activities = src_api.get_activities(project_id=project["id"])
         for activity in activities:
-            if activity["id"] not in activity_mapping:
+            if str(activity["id"]) not in activity_mapping:
                 print("Mapping missing for activity " + activity["name"])
-                # TODO: Create Mapping
+                config["activity_mapping"][str(activity["id"])] = ask_activity_mapping(activity, dest_api)
+                config["updated"] = True
+                #save_updated_config(config, args.config_file)
 
+    # start syncing
+    timesheets = src_api.get_timesheets(customer_id=customer["id"], order="begin", direction="ASC")
+    for timesheet in timesheets:
+        # remove some unnecessary elements
+        timesheet.pop('user', None)
+        timesheet.pop('id', None)
+        timesheet.pop('project', None)
+
+        # translate mapping
+        timesheet["activity"]=activity_mapping[str(timesheet["activity"])]
+
+        # TODO: Save Timesheet in Destination
+        print(timesheet)

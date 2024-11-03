@@ -3,6 +3,7 @@ import urllib.parse
 
 import requests
 
+
 class KimaiAPI:
     def __init__(self, url=None, apikey=None):
         self.__logged_on = False
@@ -25,30 +26,70 @@ class KimaiAPI:
         if not self.__logged_on:
             raise Exception("You have to logon first")
         if id is not None:
-            return self.__get_from_server("customers/"+str(id))
+            return self.__get_from_server("customers/" + str(id))
         if term is not None:
-            return self.__get_first_of_array(self.__get_from_server("customers?term="+urllib.parse.quote_plus(term)))
+            return self.__get_first_of_array(self.__get_from_server("customers?term=" + urllib.parse.quote_plus(term)))
         raise Exception("No valid parameter supplied")
 
     def get_projects(self, id=None, customer_id=None):
         if not self.__logged_on:
             raise Exception("You have to logon first")
         if id is not None:
-            return self.__get_from_server("projects/"+str(id))
+            return self.__get_from_server("projects/" + str(id))
         if customer_id is not None:
-            return self.__get_from_server("projects?customer="+str(customer_id))
+            return self.__get_from_server("projects?customer=" + str(customer_id))
         return self.__get_from_server("projects")
 
-    def get_activities(self, id = None, project_id=None):
+    def get_activities(self, id=None, project_id=None, order=None):
         if not self.__logged_on:
             raise Exception("You have to logon first")
+        query = "activities"
+
         if id is not None:
-            return self.__get_from_server("activities/"+str(id))
+            query = "activities/" + str(id)
         if project_id is not None:
-            return self.__get_from_server("activities?project="+str(project_id))
-        return self.__get_from_server("activities")
+            query = "activities?project=" + str(project_id)
+
+        if order is not None:
+            if "?" in query:
+                query += "&"
+            else:
+                query += "?"
+            query += "orderBy=" + order
+
+        return self.__get_from_server(query)
+
+    def get_timesheets(self, id=None, customer_id=None, project_id=None, order=None, direction=None):
+        if not self.__logged_on:
+            raise Exception("You have to logon first")
+        query = "timesheets"
+        if id is not None:
+            query = "timesheets/" + str(id)
+        if customer_id is not None:
+            query = "timesheets?customer=" + str(customer_id)
+        if project_id is not None:
+            query = "timesheets?project=" + str(project_id)
+
+        if order is not None:
+            if "?" in query:
+                query += "&"
+            else:
+                query += "?"
+            query += "orderBy=" + order
+
+        if direction is not None:
+            if "?" in query:
+                query += "&"
+            else:
+                query += "?"
+            query += "order=" + direction
+
+        return self.__get_from_server(query)
 
     def __get_from_server(self, endpoint):
+        return self.__apicall(endpoint)
+
+    def __apicall(self,endpoint,post=None, patch = None):
         # verify parameter
         if self.__url is None:
             raise Exception("URL not given/defined")
@@ -61,16 +102,24 @@ class KimaiAPI:
         url += "api/" + endpoint
 
         headers = {"Authorization": "Bearer " + self.__apikey}
-        r = requests.get(url, headers=headers)
+        if post is None and patch is None:
+            r = requests.get(url, headers=headers)
+        elif post is not None:
+            r = requests.post(url, headers=headers, json=post)
+        elif patch is not None:
+            r = requests.patch(url, headers=headers, json=patch)
         self.__api_status_code = r.status_code
         if r.status_code == 401:
             raise Exception("Wrong API Key")
 
         if r.status_code != 200:
-            raise Exception("Other API Exception, statuscode = "+str(r.status_code))
+            raise Exception("Other API Exception, statuscode = " + str(r.status_code))
 
         # return as json object
         return json.loads(r.text)
+
+    def __post_to_server(self, endpoint, data):
+        return self.__apicall(endpoint, post=data)
 
     def __get_first_of_array(self, data):
         if data == None:
@@ -82,9 +131,3 @@ class KimaiAPI:
             return data[0]
 
         return data
-
-
-
-
-
-
