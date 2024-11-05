@@ -200,7 +200,8 @@ if __name__ == "__main__":
 
         # Save Timesheet in Destination
         dest_api.save_timesheet(timesheet)
-        print(timesheet)
+        if args.verbose:
+            print(timesheet)
 
         # Save Begin-Date in config in case of a crash/restart
         config["last_begin"] = timesheet["begin"]
