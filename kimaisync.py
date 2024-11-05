@@ -36,27 +36,27 @@ def is_empty(data):
 
     return False
 
+
 project_list = None
 activity_list = None
 
+
 def ask_project_mapping(project, api):
     global project_list
-    print("Please provide Mapping for "+project["name"])
+    print("Please provide Mapping for " + project["name"])
     if project_list is None:
         project_list = api.get_projects()
 
-    possible_ids=["-1"]
+    possible_ids = ["-1"]
 
     for p in project_list:
-        print(p["id"],p["name"])
+        print(p["id"], p["name"])
         possible_ids.append(str(p["id"]))
 
     while True:
-        res = input("Mapping-ID for project "+project["name"]+" (-1 = Do not map): ")
+        res = input("Mapping-ID for project " + project["name"] + " (-1 = Do not map): ")
         if res in possible_ids:
             return res
-
-
 
 
 def save_updated_config(config, file):
@@ -68,21 +68,20 @@ def save_updated_config(config, file):
 
 def ask_activity_mapping(activity, api):
     global activity_list
-    print("Please provide Mapping for "+activity["name"])
+    print("Please provide Mapping for " + activity["name"])
     if activity_list is None:
         activity_list = api.get_activities(order="id")
 
-    possible_ids=[]
+    possible_ids = []
 
     for p in activity_list:
-        print(p["id"],p["name"])
+        print(p["id"], p["name"])
         possible_ids.append(str(p["id"]))
 
     while True:
-        res = input("Mapping-ID for activity "+activity["name"]+": ")
+        res = input("Mapping-ID for activity " + activity["name"] + ": ")
         if res in possible_ids:
             return res
-
 
 
 if __name__ == "__main__":
@@ -126,7 +125,7 @@ if __name__ == "__main__":
     get_config_value("destination_apikey", config, args)
 
     # save updated config
-    save_updated_config(config,args.config_file)
+    save_updated_config(config, args.config_file)
 
     # logon to destination api
     dest_api = KimaiAPI(url=config["destination_url"], apikey=config["destination_apikey"])
@@ -143,17 +142,17 @@ if __name__ == "__main__":
 
     # validate projects and mapping
     projects = src_api.get_projects(customer_id=customer["id"])
-    if not "project_mapping" in config:
+    if "project_mapping" not in config:
         config["project_mapping"] = {}
-    if not "activity_mapping" in config:
+    if "activity_mapping" not in config:
         config["activity_mapping"] = {}
     project_mapping = config["project_mapping"]
-    activity_mapping= config["activity_mapping"]
+    activity_mapping = config["activity_mapping"]
     for project in projects:
         if str(project["id"]) not in project_mapping:
             print("Mapping missing for project " + project["name"])
-            config["project_mapping"][str(project["id"])]=ask_project_mapping(project,dest_api)
-            config["updated"]=True
+            config["project_mapping"][str(project["id"])] = ask_project_mapping(project, dest_api)
+            config["updated"] = True
             save_updated_config(config, args.config_file)
 
         activities = src_api.get_activities(project_id=project["id"])
@@ -162,28 +161,49 @@ if __name__ == "__main__":
                 print("Mapping missing for activity " + activity["name"])
                 config["activity_mapping"][str(activity["id"])] = ask_activity_mapping(activity, dest_api)
                 config["updated"] = True
-                #save_updated_config(config, args.config_file)
+                save_updated_config(config, args.config_file)
 
-    # start syncing
+    # start syncing at last "end"
     begin = None
+    last_source_id = None
     if "last_begin" in config:
         begin = config["last_begin"]
+        if '+' in begin:
+            begin = begin.split('+', 1)[0]
+    if "last_source_id" in config:
+        last_source_id= config["last_source_id"]
+
     timesheets = src_api.get_timesheets(customer_id=customer["id"], order="begin", direction="ASC", begin=begin)
     for timesheet in timesheets:
-        # remove some unnecessary elements
+        # only complete elements
+        if "end" not in timesheet or timesheet["end"] == "":
+            continue
+
+        source_id = timesheet["id"]
+        if last_source_id is not None and source_id<=last_source_id:
+            continue
+
+        # remove some unnecessary fields
         timesheet.pop('user', None)
         timesheet.pop('id', None)
-        timesheet.pop('project', None)
+        timesheet.pop('tags', None)
+        timesheet.pop('duration', None)
+        timesheet.pop('rate', None)
+        timesheet.pop('internalRate', None)
+        timesheet.pop('metaFields', None)
+
+
 
         # translate mapping
-        timesheet["activity"]=activity_mapping[str(timesheet["activity"])]
+        timesheet["activity"] = activity_mapping[str(timesheet["activity"])]
+        timesheet["project"] = project_mapping[str(timesheet["project"])]
 
         # Save Timesheet in Destination
-        # TODO: dest_api.save_timesheet(timesheet)
+        dest_api.save_timesheet(timesheet)
         print(timesheet)
 
         # Save Begin-Date in config in case of a crash/restart
         config["last_begin"] = timesheet["begin"]
+        config["last_source_id"] = source_id
         config["updated"] = True
-        # TODO: save_updated_config(config, args.config_file)
-
+        save_updated_config(config, args.config_file)
